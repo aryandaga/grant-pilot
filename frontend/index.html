@@ -1,0 +1,91 @@
+<!doctype html>
+<html class="dark" lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Grant Pilot CRM</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "error": "#ffb4ab",
+              "background": "#111318",
+              "on-background": "#e2e2e9",
+              "tertiary-fixed": "#d8e2ff",
+              "outline-variant": "#4d463a",
+              "surface-container-highest": "#33353a",
+              "on-tertiary-fixed": "#081b3b",
+              "on-secondary": "#3a2f1a",
+              "on-tertiary": "#203051",
+              "on-secondary-fixed": "#241a07",
+              "primary": "#e6c487",
+              "inverse-primary": "#745a27",
+              "secondary-container": "#544731",
+              "on-primary": "#412d00",
+              "inverse-surface": "#e2e2e9",
+              "primary-fixed": "#ffdea4",
+              "on-error": "#690005",
+              "tertiary-container": "#9dadd5",
+              "error-container": "#93000a",
+              "surface-container-lowest": "#0c0e13",
+              "surface-variant": "#33353a",
+              "secondary": "#d7c4a7",
+              "on-surface-variant": "#d0c5b5",
+              "tertiary-fixed-dim": "#b6c6ef",
+              "primary-fixed-dim": "#e4c285",
+              "surface": "#111318",
+              "secondary-fixed-dim": "#d7c4a7",
+              "primary-container": "#c9a96e",
+              "surface-container": "#1e2025",
+              "on-error-container": "#ffdad6",
+              "on-surface": "#e2e2e9",
+              "surface-tint": "#e4c285",
+              "surface-bright": "#37393f",
+              "surface-dim": "#111318",
+              "surface-container-high": "#282a2f",
+              "secondary-fixed": "#f3e0c1",
+              "outline": "#998f81",
+              "on-tertiary-container": "#314163",
+              "on-secondary-container": "#c8b699",
+              "surface-container-low": "#1a1c21",
+              "on-secondary-fixed-variant": "#52452f",
+              "on-primary-container": "#543d0c",
+              "tertiary": "#b8c8f2",
+              "on-primary-fixed-variant": "#5a4312",
+              "on-tertiary-fixed-variant": "#374669",
+              "on-primary-fixed": "#261900",
+              "inverse-on-surface": "#2e3036"
+            },
+            borderRadius: {
+              DEFAULT: "0.125rem",
+              lg: "0.25rem",
+              xl: "0.5rem",
+              full: "0.75rem"
+            },
+            fontFamily: {
+              headline: ["Inter"],
+              body: ["Inter"],
+              label: ["Inter"]
+            }
+          }
+        }
+      }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+    <style>
+      body { font-family: 'Inter', sans-serif; }
+      .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

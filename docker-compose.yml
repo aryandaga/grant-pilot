@@ -1,0 +1,18 @@
+version: '3.9'
+
+services:
+  db:
+    image: ankane/pgvector:latest
+    container_name: grantpilot_db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: grantpilot
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
