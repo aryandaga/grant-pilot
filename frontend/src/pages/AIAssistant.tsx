@@ -1,28 +1,23 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { sendMessage } from '../api/chat';
+import {
+  getChats, getChat, createChat, sendChatMessage,
+  type ChatSummary,
+} from '../api/chats';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Message = {
+  id?: string;
   role: 'user' | 'assistant';
   content: string;
   sources?: string[];
 };
 
-type Chat = {
-  id: string;
-  title: string | null;
-  messages: Message[];
-};
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function newChat(): Chat {
-  return { id: crypto.randomUUID(), title: null, messages: [] };
-}
-
-function chatTitle(chat: Chat): string {
+function chatTitle(chat: ChatSummary): string {
   return chat.title ?? 'New chat';
 }
 
@@ -31,30 +26,62 @@ function chatTitle(chat: Chat): string {
 export default function AIAssistant() {
   const navigate = useNavigate();
 
-  const [chats,        setChats]        = useState<Chat[]>([]);
+  const [chats,        setChats]        = useState<ChatSummary[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const [messages,     setMessages]     = useState<Message[]>([]);
   const [input,        setInput]        = useState('');
   const [loading,      setLoading]      = useState(false);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const textareaRef  = useRef<HTMLTextAreaElement | null>(null);
 
-  // Initialise: one chat on mount, set as active
+  // ── On mount: load chats, restore last active chat if possible ───────────
+
   useEffect(() => {
-    const initial = newChat();
-    setChats([initial]);
-    setActiveChatId(initial.id);
+    (async () => {
+      try {
+        const res  = await getChats();
+        const list: ChatSummary[] = res.data;
+
+        if (list.length > 0) {
+          setChats(list);
+          const savedId = localStorage.getItem('activeChatId');
+          const exists  = savedId && list.some((c) => c.id === savedId);
+          setActiveChatId(exists ? savedId : list[0].id);
+        } else {
+          const created = await createChat();
+          setChats([created.data]);
+          setActiveChatId(created.data.id);
+        }
+      } catch (err) {
+        console.error('Failed to load chats:', err);
+      }
+    })();
   }, []);
 
-  // Focus textarea whenever the active chat changes
+  // ── Persist active chat id across reloads ─────────────────────────────────
+
+  useEffect(() => {
+    if (activeChatId) localStorage.setItem('activeChatId', activeChatId);
+  }, [activeChatId]);
+
+  // ── Load messages when active chat changes ────────────────────────────────
+
+  useEffect(() => {
+    if (!activeChatId) return;
+    getChat(activeChatId)
+      .then((res) => setMessages(res.data.messages))
+      .catch((err) => console.error('Failed to load messages:', err));
+  }, [activeChatId]);
+
+  // ── Focus textarea on chat switch ─────────────────────────────────────────
+
   useEffect(() => {
     if (activeChatId) textareaRef.current?.focus();
   }, [activeChatId]);
 
-  const activeChat = chats.find((c) => c.id === activeChatId) ?? null;
-  const messages   = activeChat?.messages ?? [];
+  // ── Smart auto-scroll ─────────────────────────────────────────────────────
 
-  // Smart auto-scroll: only if user is already near the bottom
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -62,60 +89,84 @@ export default function AIAssistant() {
     if (isNearBottom) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
   }, [messages]);
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
+  // ── New chat ──────────────────────────────────────────────────────────────
 
-  const appendToActive = (msg: Message) => {
-    setChats((prev) =>
-      prev.map((c) =>
-        c.id === activeChatId ? { ...c, messages: [...c.messages, msg] } : c
-      )
-    );
+  const handleNewChat = async () => {
+    if (messages.length === 0) return; // don't create if current chat is empty
+    try {
+      const res = await createChat();
+      setChats((prev) => [res.data, ...prev]);
+      setActiveChatId(res.data.id);
+      setMessages([]);
+      setInput('');
+    } catch (err) {
+      console.error('Failed to create chat:', err);
+    }
   };
 
-  const handleNewChat = () => {
-    // Prevent empty-chat spam: do nothing if current chat has no messages
-    const current = chats.find((c) => c.id === activeChatId);
-    if (current && current.messages.length === 0) return;
-    const c = newChat();
-    setChats((prev) => [c, ...prev]);
-    setActiveChatId(c.id);
-    setInput('');
-  };
-
-  // ── Send ───────────────────────────────────────────────────────────────────
+  // ── Send ──────────────────────────────────────────────────────────────────
 
   const handleSend = async () => {
-    if (!input.trim() || loading || !activeChatId) return;
+    if (loading || !input.trim() || !activeChatId) return;
 
     const userInput = input.trim();
-    setInput('');
+    const chatId    = activeChatId;
 
-    // Reset textarea height after clearing
+    // Clear input immediately
+    setInput('');
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
 
-    // Append user message; set title on first message in this chat
-    setChats((prev) =>
-      prev.map((c) => {
-        if (c.id !== activeChatId) return c;
-        return {
-          ...c,
-          title: c.title ?? userInput.slice(0, 40),
-          messages: [...c.messages, { role: 'user' as const, content: userInput }],
-        };
-      })
-    );
-
+    // Lock before any async work to prevent double-send
     setLoading(true);
 
+    // Optimistic: show user message + "Thinking…" placeholder immediately
+    setMessages((prev) => [
+      ...prev,
+      { role: 'user'      as const, content: userInput },
+      { role: 'assistant' as const, content: '…',       id: '__thinking__' },
+    ]);
+
+    // Store AI sources so we can attach them after the backend sync
+    let aiSources: string[] = [];
+
     try {
-      const data = await sendMessage({ query: userInput, document_ids: [] });
-      appendToActive({ role: 'assistant', content: data.answer, sources: data.sources });
+      // 1. Persist user message
+      await sendChatMessage(chatId, { role: 'user', content: userInput });
+
+      // 2. Call AI
+      const aiRes = await sendMessage({ query: userInput, document_ids: [] });
+      aiSources = aiRes.sources ?? [];
+
+      // 3. Persist assistant message
+      await sendChatMessage(chatId, { role: 'assistant', content: aiRes.answer });
+
+      // 4. Sync messages from backend (source of truth), then attach sources
+      const chatRes = await getChat(chatId);
+      const synced  = chatRes.data.messages as Message[];
+
+      // Reattach sources to the last assistant message (not stored in DB)
+      if (aiSources.length > 0 && synced.length > 0) {
+        const last = synced[synced.length - 1];
+        if (last.role === 'assistant') last.sources = aiSources;
+      }
+
+      setMessages(synced);
+
+      // 5. Refresh chat list so backend-set title is reflected in sidebar
+      const chatsRes = await getChats();
+      setChats(chatsRes.data);
+
     } catch (err: unknown) {
-      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      const detail   = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
       const errorMsg = detail ?? (err instanceof Error ? err.message : 'Something went wrong. Please try again.');
-      appendToActive({ role: 'assistant', content: errorMsg });
+
+      // Replace the "Thinking…" placeholder with the real error
+      setMessages((prev) =>
+        prev.filter((m) => m.id !== '__thinking__').concat({ role: 'assistant' as const, content: errorMsg })
+      );
     } finally {
       setLoading(false);
+      textareaRef.current?.focus();
     }
   };
 
@@ -218,17 +269,19 @@ export default function AIAssistant() {
 
             {messages.map((msg, i) => (
               <div
-                key={i}
+                key={msg.id ?? i}
                 className={`flex flex-col gap-1 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
               >
                 <div
                   className={`max-w-[70%] px-4 py-2 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
-                    msg.role === 'user'
-                      ? 'bg-primary/20 text-on-surface'
-                      : 'bg-surface-container text-on-surface'
+                    msg.id === '__thinking__'
+                      ? 'bg-surface-container text-on-surface-variant italic'
+                      : msg.role === 'user'
+                        ? 'bg-primary/20 text-on-surface'
+                        : 'bg-surface-container text-on-surface'
                   }`}
                 >
-                  {msg.content}
+                  {msg.id === '__thinking__' ? 'Thinking…' : msg.content}
                 </div>
                 {msg.sources && msg.sources.length > 0 && (
                   <div className="flex flex-wrap gap-1 px-1">
@@ -245,13 +298,7 @@ export default function AIAssistant() {
               </div>
             ))}
 
-            {loading && (
-              <div className="flex items-start">
-                <div className="max-w-[70%] px-4 py-2 rounded-2xl text-sm bg-surface-container text-on-surface-variant italic">
-                  Thinking…
-                </div>
-              </div>
-            )}
+            {/* "Thinking…" is rendered as a regular message with id="__thinking__" */}
           </div>
 
           {/* Input bar */}

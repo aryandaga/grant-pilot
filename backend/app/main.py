@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine, Base
 import app.models  # noqa: F401 — registers all models with Base
 
-from app.routers import auth, investors, notes, interactions, documents, ai
+from app.routers import auth, investors, notes, interactions, documents, ai, chats
 
 # Create all tables on startup
 Base.metadata.create_all(bind=engine)
@@ -36,6 +36,7 @@ app.include_router(notes.router)
 app.include_router(interactions.router)
 app.include_router(documents.router)
 app.include_router(ai.router, prefix="/api/ai")
+app.include_router(chats.router)
 
 
 @app.get("/")

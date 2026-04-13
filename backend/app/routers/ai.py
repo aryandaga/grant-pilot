@@ -22,11 +22,27 @@ genai.configure(api_key=os.getenv("GEMINI_API_KEY", ""))
 
 
 def get_gemini_model() -> genai.GenerativeModel:
-    """Return a GenerativeModel, falling back to the -latest alias on error."""
-    try:
-        return genai.GenerativeModel("gemini-1.5-flash")
-    except Exception:
-        return genai.GenerativeModel("gemini-1.5-flash-latest")
+    """
+    List models available to the configured API key and return the first one
+    that supports generateContent, preferring flash variants for speed/cost.
+    """
+    models = list(genai.list_models())
+
+    # Prefer any flash model
+    for m in models:
+        if "generateContent" in m.supported_generation_methods and "flash" in m.name:
+            name = m.name.replace("models/", "")
+            print(f"Using Gemini model: {name}")
+            return genai.GenerativeModel(name)
+
+    # Fall back to any generateContent-capable model
+    for m in models:
+        if "generateContent" in m.supported_generation_methods:
+            name = m.name.replace("models/", "")
+            print(f"Using Gemini model: {name}")
+            return genai.GenerativeModel(name)
+
+    raise RuntimeError("No valid Gemini model found for this API key.")
 
 
 # ─── Schemas ──────────────────────────────────────────────────────────────────
