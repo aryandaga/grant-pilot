@@ -34,28 +34,8 @@ type Interaction = {
 
 // ─── Pipeline config ──────────────────────────────────────────────────────────
 
-const PIPELINE_STAGES = ['Cold', 'Initial', 'Qualified', 'Proposal', 'Diligent', 'Commit', 'Received'];
-
-const STAGE_TO_PIPELINE_INDEX: Record<string, number> = {
-  pre_seed:   0,
-  cold:       0,
-  seed:       1,
-  initial:    1,
-  qualifying: 2,
-  qualified:  2,
-  series_a:   2,
-  grant:      3,
-  proposal:   3,
-  series_b:   3,
-  diligent:   4,
-  commit:     5,
-  committed:  5,
-  received:   6,
-};
-
-function getPipelineIndex(stage: string): number {
-  return STAGE_TO_PIPELINE_INDEX[stage.toLowerCase()] ?? 0;
-}
+const STAGE_ORDER   = ['cold', 'initial', 'qualified', 'proposal', 'diligent', 'commit', 'received'];
+const PIPELINE_LABELS = ['Cold', 'Initial', 'Qualified', 'Proposal', 'Diligent', 'Commit', 'Received'];
 
 // ─── Placeholder data ─────────────────────────────────────────────────────────
 
@@ -205,8 +185,9 @@ export default function InvestorDetail() {
 
   // ── Derived values ────────────────────────────────────────────────────────
 
-  const currentIdx  = getPipelineIndex(investor.stage);
-  const filledPct   = `${(currentIdx / (PIPELINE_STAGES.length - 1)) * 100}%`;
+  const safeStage  = STAGE_ORDER.includes(investor.stage) ? investor.stage : 'cold';
+  const currentIdx = STAGE_ORDER.indexOf(safeStage);
+  const filledPct  = `${(currentIdx / (STAGE_ORDER.length - 1)) * 100}%`;
   const interests   = investor.interests && investor.interests.length > 0
     ? investor.interests
     : STATIC_INTERESTS;
@@ -255,7 +236,10 @@ export default function InvestorDetail() {
             <span className="material-symbols-outlined text-[16px]">add_comment</span>
             Log Interaction
           </button>
-          <button className="px-5 py-2 ghost-border text-on-surface text-xs font-semibold rounded-sm hover:bg-surface-container-high transition-all">
+          <button
+            className="px-5 py-2 ghost-border text-on-surface text-xs font-semibold rounded-sm hover:bg-surface-container-high transition-all"
+            onClick={() => navigate(`/investor/${id}/edit`)}
+          >
             Edit Profile
           </button>
         </div>
@@ -274,7 +258,7 @@ export default function InvestorDetail() {
             <div className="h-full bg-surface-container-highest flex-1"></div>
           </div>
           {/* Stage nodes */}
-          {PIPELINE_STAGES.map((label, idx) => {
+          {PIPELINE_LABELS.map((label, idx) => {
             const done   = idx < currentIdx;
             const active = idx === currentIdx;
             return (
@@ -311,21 +295,6 @@ export default function InvestorDetail() {
 
         {/* Left Column */}
         <div className="flex flex-col gap-6">
-
-          {/* Recommended Next Action — PLACEHOLDER */}
-          <div className="bg-primary/5 border border-primary/10 rounded-lg p-5 flex items-start gap-4">
-            <div className="bg-primary/20 p-2 rounded text-primary shrink-0">
-              <span className="material-symbols-outlined">bolt</span>
-            </div>
-            <div>
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-primary mb-1">
-                Recommended Next Action
-              </h4>
-              <p className="text-sm text-on-surface leading-snug">
-                Follow up on revised proposal regarding the ESG-indexed infrastructure pool. Schedule call for Tuesday morning.
-              </p>
-            </div>
-          </div>
 
           {/* Sector Interests */}
           <div className="bg-surface-container rounded-lg p-6">

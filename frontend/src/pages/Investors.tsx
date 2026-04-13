@@ -14,15 +14,17 @@ function formatStage(stage: string): string {
     .join(' ');
 }
 
+const STAGES = ['cold', 'initial', 'qualified', 'proposal', 'diligent', 'commit', 'received'];
+
 function getStageBadgeClass(stage: string): string {
-  const s = stage.toLowerCase();
-  if (s === 'grant' || s === 'committed') {
+  const s = STAGES.includes(stage) ? stage : 'cold';
+  if (s === 'commit' || s === 'received') {
     return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/20';
   }
-  if (s === 'series_a' || s === 'series_b' || s === 'meeting') {
+  if (s === 'diligent' || s === 'proposal') {
     return 'bg-tertiary/20 text-tertiary border-tertiary/20';
   }
-  // seed, pre_seed, proposal, qualifying → gold
+  // cold, initial, qualified → gold
   return 'bg-primary/20 text-primary border-primary/20';
 }
 
@@ -36,13 +38,19 @@ function getPlaceholderImage(name: string): string {
   return `https://placehold.co/400x200/1e2025/998f81?text=${encodeURIComponent(initials)}`;
 }
 
+function capitalise(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function Investors() {
   const navigate = useNavigate();
-  const [investors, setInvestors] = useState<Investor[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
+  const [investors,      setInvestors]      = useState<Investor[]>([]);
+  const [loading,        setLoading]        = useState<boolean>(true);
+  const [error,          setError]          = useState<string | null>(null);
+  const [stageFilter,    setStageFilter]    = useState<string>('all');
+  const [assignedFilter, setAssignedFilter] = useState<string>('all');
 
   useEffect(() => {
     (async () => {
@@ -60,6 +68,17 @@ export default function Investors() {
   if (error) {
     return <div className="text-red-500 p-4">{error}</div>;
   }
+
+  const filteredInvestors = investors.filter((inv) => {
+    const stageMatch =
+      stageFilter === 'all' ||
+      (STAGES.includes(inv.stage) ? inv.stage === stageFilter : stageFilter === 'cold');
+
+    // assignedFilter: backend doesn't support assignment yet — always match
+    const assignedMatch = assignedFilter === 'all' || true;
+
+    return stageMatch && assignedMatch;
+  });
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -96,8 +115,8 @@ export default function Investors() {
             <span className="font-medium tracking-tight">Investor Profile</span>
           </a>
           <a
-            className="flex items-center gap-3 px-3 py-2 text-sm text-[#94a3b8] hover:text-[#e2e2e9] hover:bg-[#111318]/50 transition-all rounded-md group"
-            href="#"
+            className="flex items-center gap-3 px-3 py-2 text-sm text-[#94a3b8] hover:text-[#e2e2e9] hover:bg-[#111318]/50 transition-all rounded-md group cursor-pointer"
+            onClick={() => navigate('/ai')}
           >
             <span className="material-symbols-outlined text-xl">smart_toy</span>
             <span className="font-medium tracking-tight">AI Assistant</span>
@@ -112,10 +131,6 @@ export default function Investors() {
         </nav>
 
         <div className="mt-auto pt-6 space-y-4">
-          <button className="w-full bg-[#e6c487] text-[#111318] text-[13px] font-semibold py-2.5 px-3 rounded-md flex items-center justify-center gap-2 active:scale-[0.98] transition-transform">
-            <span className="material-symbols-outlined text-lg">add</span>
-            Log Interaction
-          </button>
           <a
             className="flex items-center gap-3 px-3 py-2 text-sm text-[#94a3b8] hover:text-[#e2e2e9] transition-all rounded-md"
             href="#"
@@ -131,43 +146,76 @@ export default function Investors() {
         <div className="flex-1 overflow-y-auto p-6 no-scrollbar">
 
           {/* Header */}
-          <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
             <div>
               <h2 className="text-[16px] font-semibold text-on-surface">All Investors</h2>
               <p className="text-[12px] text-on-surface-variant mt-0.5">
-                {loading ? '—' : `${investors.length} leads`} · 5 active this week
+                {loading ? '—' : `${filteredInvestors.length} leads`} · 5 active this week
               </p>
             </div>
-            <div className="relative w-full max-w-[280px]">
-              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/60 text-lg">
-                search
-              </span>
-              <input
-                className="w-full bg-[#1e2025] border-none focus:ring-1 focus:ring-primary rounded-lg pl-10 pr-4 py-2 text-sm text-on-surface placeholder:text-on-surface-variant/40"
-                placeholder="Search investors..."
-                type="text"
-              />
+            <div className="flex items-center gap-3">
+              <div className="relative w-full max-w-[240px]">
+                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/60 text-lg">
+                  search
+                </span>
+                <input
+                  className="w-full bg-[#1e2025] border-none focus:ring-1 focus:ring-primary rounded-lg pl-10 pr-4 py-2 text-sm text-on-surface placeholder:text-on-surface-variant/40"
+                  placeholder="Search investors..."
+                  type="text"
+                />
+              </div>
+              <button
+                onClick={() => navigate('/investors/new')}
+                className="shrink-0 bg-[#e6c487] text-[#111318] text-[13px] font-semibold py-2 px-4 rounded-md flex items-center gap-1.5 hover:brightness-110 active:scale-[0.98] transition-all"
+              >
+                <span className="material-symbols-outlined text-[18px]">add</span>
+                Add Investor
+              </button>
             </div>
           </div>
 
           {/* Filter Bar */}
           <div className="flex items-center gap-2 mb-8 overflow-x-auto no-scrollbar pb-1">
-            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1e2025] rounded border border-outline-variant/10 cursor-pointer hover:bg-surface-container-high transition-colors">
+            {/* Assigned to filter */}
+            <div className="relative flex items-center gap-1.5 px-3 py-1.5 bg-[#1e2025] rounded border border-outline-variant/10 cursor-pointer hover:bg-surface-container-high transition-colors">
               <span className="text-[11px] font-medium text-on-surface-variant">Assigned to:</span>
               <span className="text-[11px] font-semibold text-on-surface">Everyone</span>
               <span className="material-symbols-outlined text-xs text-on-surface-variant">
                 keyboard_arrow_down
               </span>
+              <select
+                value={assignedFilter}
+                onChange={(e) => setAssignedFilter(e.target.value)}
+                className="absolute inset-0 opacity-0 cursor-pointer w-full"
+              >
+                <option value="all">Everyone</option>
+              </select>
             </div>
-            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1e2025] rounded border border-outline-variant/10 cursor-pointer hover:bg-surface-container-high transition-colors">
+            {/* Stage filter */}
+            <div className="relative flex items-center gap-1.5 px-3 py-1.5 bg-[#1e2025] rounded border border-outline-variant/10 cursor-pointer hover:bg-surface-container-high transition-colors">
               <span className="text-[11px] font-medium text-on-surface-variant">Stage:</span>
-              <span className="text-[11px] font-semibold text-on-surface">All Stages</span>
+              <span className="text-[11px] font-semibold text-on-surface">
+                {stageFilter === 'all' ? 'All Stages' : capitalise(stageFilter)}
+              </span>
               <span className="material-symbols-outlined text-xs text-on-surface-variant">
                 keyboard_arrow_down
               </span>
+              <select
+                value={stageFilter}
+                onChange={(e) => setStageFilter(e.target.value)}
+                className="absolute inset-0 opacity-0 cursor-pointer w-full"
+              >
+                <option value="all">All Stages</option>
+                {STAGES.map((s) => (
+                  <option key={s} value={s}>{capitalise(s)}</option>
+                ))}
+              </select>
             </div>
             <div className="h-4 w-px bg-outline-variant/20 mx-1"></div>
-            <button className="px-3 py-1.5 rounded-md text-[11px] font-medium text-on-surface-variant hover:text-on-surface transition-colors">
+            <button
+              onClick={() => { setStageFilter('all'); setAssignedFilter('all'); }}
+              className="px-3 py-1.5 rounded-md text-[11px] font-medium text-on-surface-variant hover:text-on-surface transition-colors"
+            >
               Clear Filters
             </button>
           </div>
@@ -180,14 +228,16 @@ export default function Investors() {
           )}
 
           {/* Empty state */}
-          {!loading && investors.length === 0 && (
-            <div className="p-4 text-gray-400">No investors found</div>
+          {!loading && filteredInvestors.length === 0 && (
+            <div className="p-4 text-gray-400">
+              {investors.length === 0 ? 'No investors found' : 'No investors match the current filters'}
+            </div>
           )}
 
           {/* Investor Grid */}
-          {!loading && investors.length > 0 && (
+          {!loading && filteredInvestors.length > 0 && (
             <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-6">
-              {investors.map((investor) => (
+              {filteredInvestors.map((investor) => (
                 <div
                   key={investor.id}
                   className="bg-[#1e2025] rounded-lg overflow-hidden flex flex-col group hover:shadow-xl hover:shadow-black/20 transition-all duration-300 cursor-pointer"

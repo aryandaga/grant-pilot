@@ -252,8 +252,8 @@ export default function Documents() {
             <span className="font-medium tracking-tight">Investor Profile</span>
           </a>
           <a
-            className="flex items-center gap-3 px-3 py-2 text-sm text-[#94a3b8] hover:text-[#e2e2e9] hover:bg-[#111318]/50 transition-all rounded-md"
-            href="#"
+            className="flex items-center gap-3 px-3 py-2 text-sm text-[#94a3b8] hover:text-[#e2e2e9] hover:bg-[#111318]/50 transition-all rounded-md cursor-pointer"
+            onClick={() => navigate('/ai')}
           >
             <span className="material-symbols-outlined text-xl">smart_toy</span>
             <span className="font-medium tracking-tight">AI Assistant</span>
@@ -274,10 +274,6 @@ export default function Documents() {
         </nav>
 
         <div className="mt-auto pt-6 space-y-4">
-          <button className="w-full bg-[#e6c487] text-[#111318] text-[13px] font-semibold py-2.5 px-3 rounded-md flex items-center justify-center gap-2 active:scale-[0.98] transition-transform">
-            <span className="material-symbols-outlined text-lg">add</span>
-            Log Interaction
-          </button>
           <a
             className="flex items-center gap-3 px-3 py-2 text-sm text-[#94a3b8] hover:text-[#e2e2e9] transition-all rounded-md"
             href="#"
