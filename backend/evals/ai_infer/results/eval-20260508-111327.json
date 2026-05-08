@@ -1,0 +1,97 @@
+{
+  "created_at": "2026-05-08T05:43:27.082057+00:00",
+  "dataset": "C:\\Users\\dag\\Documents\\grant-pilot\\backend\\evals\\ai_infer\\dataset.jsonl",
+  "endpoint_under_eval": "/api/ai/query",
+  "mode_under_eval": "infer",
+  "summary": {
+    "endpoint_infer_prompt": {
+      "examples": 1,
+      "avg_coverage_score": 1.0,
+      "avg_llm_judge_score": 4.0
+    },
+    "baseline_single_llm_prompt": {
+      "examples": 1,
+      "avg_coverage_score": 1.0,
+      "avg_llm_judge_score": 5.0
+    },
+    "baseline_agentic_tool_loop": {
+      "examples": 1,
+      "avg_coverage_score": 1.0,
+      "avg_llm_judge_score": 5.0
+    }
+  },
+  "results": [
+    {
+      "example_id": "infer-001",
+      "endpoint": "/api/ai/query",
+      "mode": "infer",
+      "system": "endpoint_infer_prompt",
+      "question": "What is the requested grant amount and what will the funds be used for?",
+      "ground_truth": "The requested grant amount is USD 250,000. It will fund 40 need-based scholarships for first-generation learners, mentoring, and residential bridge-program costs before the first semester.",
+      "answer": "- **Requested grant amount**: USD 250,000\n- **Purpose of funds**: To expand the STEM Access Scholarship Fund by supporting 40 need-based scholarships for first-generation learners, providing mentoring for recipients, and covering residential bridge-program costs before the first semester.",
+      "judgment": {
+        "llm_judge": {
+          "score": 4,
+          "faithful": false,
+          "reason": "Covers all required facts accurately but adds unsupported details like 'expand the STEM Access Scholarship Fund' and 'for recipients' not in ground truth."
+        },
+        "must_include_hits": {
+          "USD 250,000": true,
+          "40 need-based scholarships": true,
+          "first-generation learners": true,
+          "mentoring": true,
+          "residential bridge-program costs": true
+        },
+        "coverage_score": 1.0
+      }
+    },
+    {
+      "example_id": "infer-001",
+      "endpoint": "/api/ai/query",
+      "mode": "infer",
+      "system": "baseline_single_llm_prompt",
+      "question": "What is the requested grant amount and what will the funds be used for?",
+      "ground_truth": "The requested grant amount is USD 250,000. It will fund 40 need-based scholarships for first-generation learners, mentoring, and residential bridge-program costs before the first semester.",
+      "answer": "**USD 250,000.** The funds will expand Plaksha University's STEM Access Scholarship Fund by supporting 40 need-based scholarships for first-generation learners, providing mentoring for recipients, and covering residential bridge-program costs before the first semester.",
+      "judgment": {
+        "llm_judge": {
+          "score": 5,
+          "faithful": true,
+          "reason": "Covers all required facts exactly, matches ground truth closely with minor rephrasing and contextual addition that does not contradict."
+        },
+        "must_include_hits": {
+          "USD 250,000": true,
+          "40 need-based scholarships": true,
+          "first-generation learners": true,
+          "mentoring": true,
+          "residential bridge-program costs": true
+        },
+        "coverage_score": 1.0
+      }
+    },
+    {
+      "example_id": "infer-001",
+      "endpoint": "/api/ai/query",
+      "mode": "infer",
+      "system": "baseline_agentic_tool_loop",
+      "question": "What is the requested grant amount and what will the funds be used for?",
+      "ground_truth": "The requested grant amount is USD 250,000. It will fund 40 need-based scholarships for first-generation learners, mentoring, and residential bridge-program costs before the first semester.",
+      "answer": "**Requested grant amount:** USD 250,000.\n\n**Funds usage:** To expand Plaksha University's STEM Access Scholarship Fund by supporting 40 need-based scholarships for first-generation learners, providing mentoring for recipients, and covering residential bridge-program costs before the first semester.",
+      "judgment": {
+        "llm_judge": {
+          "score": 5,
+          "faithful": true,
+          "reason": "Candidate accurately includes all required facts, matches ground truth precisely, with minor non-contradictory contextual phrasing."
+        },
+        "must_include_hits": {
+          "USD 250,000": true,
+          "40 need-based scholarships": true,
+          "first-generation learners": true,
+          "mentoring": true,
+          "residential bridge-program costs": true
+        },
+        "coverage_score": 1.0
+      }
+    }
+  ]
+}

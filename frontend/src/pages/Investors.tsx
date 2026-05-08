@@ -1,31 +1,23 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getInvestors, type Investor } from '../api/investors';
+import { getInvestorStages, getInvestors, type AssignedUser, type Investor, type InvestorStage } from '../api/investors';
+import { getUsers } from '../api/users';
+import { DEFAULT_INVESTOR_STAGES, getStageKey, getStageLabel, sortStages } from '../lib/investorStages';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 const PLACEHOLDER_DESCRIPTION = 'Investor relationship in progress...';
-const PLACEHOLDER_OWNER = 'Assigned user';
 
-function formatStage(stage: string): string {
-  return stage
-    .split('_')
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(' ');
-}
-
-const STAGES = ['cold', 'initial', 'qualified', 'proposal', 'diligent', 'commit', 'received'];
-
-function getStageBadgeClass(stage: string): string {
-  const s = STAGES.includes(stage) ? stage : 'cold';
-  if (s === 'commit' || s === 'received') {
+function getStageBadgeClass(stage: string, stages: InvestorStage[]): string {
+  const idx = stages.findIndex((item) => item.key === getStageKey(stages, stage));
+  if (idx >= 6) {
     return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/20';
   }
-  if (s === 'diligent' || s === 'proposal') {
-    return 'bg-tertiary/20 text-tertiary border-tertiary/20';
+  if (idx >= 2) {
+    return 'bg-primary/20 text-primary border-primary/30';
   }
   // cold, initial, qualified → gold
-  return 'bg-primary/20 text-primary border-primary/20';
+  return 'bg-surface-container-highest text-on-surface-variant border-outline-variant/30';
 }
 
 function getPlaceholderImage(name: string): string {
@@ -38,8 +30,8 @@ function getPlaceholderImage(name: string): string {
   return `https://placehold.co/400x200/1e2025/998f81?text=${encodeURIComponent(initials)}`;
 }
 
-function capitalise(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1);
+function roleLabel(role: AssignedUser['role']): string {
+  return role === 'head' ? 'Head' : 'Member';
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -49,14 +41,22 @@ export default function Investors() {
   const [investors,      setInvestors]      = useState<Investor[]>([]);
   const [loading,        setLoading]        = useState<boolean>(true);
   const [error,          setError]          = useState<string | null>(null);
+  const [users,          setUsers]          = useState<AssignedUser[]>([]);
+  const [stages,         setStages]         = useState<InvestorStage[]>(DEFAULT_INVESTOR_STAGES);
   const [stageFilter,    setStageFilter]    = useState<string>('all');
   const [assignedFilter, setAssignedFilter] = useState<string>('all');
 
   useEffect(() => {
     (async () => {
       try {
-        const data = await getInvestors();
-        setInvestors(data);
+        const [investorData, userData, stageData] = await Promise.all([
+          getInvestors(),
+          getUsers(),
+          getInvestorStages(),
+        ]);
+        setInvestors(investorData);
+        setUsers(userData);
+        setStages(sortStages(stageData));
       } catch {
         setError('Failed to load investors');
       } finally {
@@ -72,10 +72,10 @@ export default function Investors() {
   const filteredInvestors = investors.filter((inv) => {
     const stageMatch =
       stageFilter === 'all' ||
-      (STAGES.includes(inv.stage) ? inv.stage === stageFilter : stageFilter === 'cold');
+      getStageKey(stages, inv.stage) === stageFilter;
 
     // assignedFilter: backend doesn't support assignment yet — always match
-    const assignedMatch = assignedFilter === 'all' || true;
+    const assignedMatch = assignedFilter === 'all' || inv.primary_owner_id === assignedFilter;
 
     return stageMatch && assignedMatch;
   });
@@ -95,13 +95,6 @@ export default function Investors() {
         </div>
 
         <nav className="flex-1 space-y-1">
-          <a
-            className="flex items-center gap-3 px-3 py-2 text-sm text-[#94a3b8] hover:text-[#e2e2e9] hover:bg-[#111318]/50 transition-all rounded-md group"
-            href="#"
-          >
-            <span className="material-symbols-outlined text-xl">dashboard</span>
-            <span className="font-medium tracking-tight">Dashboard</span>
-          </a>
           <a
             className="flex items-center gap-3 px-3 py-2 text-sm text-[#e6c487] font-medium bg-[#111318]/50 rounded-md group"
             href="#"
@@ -132,8 +125,8 @@ export default function Investors() {
 
         <div className="mt-auto pt-6 space-y-4">
           <a
-            className="flex items-center gap-3 px-3 py-2 text-sm text-[#94a3b8] hover:text-[#e2e2e9] transition-all rounded-md"
-            href="#"
+            className="flex items-center gap-3 px-3 py-2 text-sm text-[#94a3b8] hover:text-[#e2e2e9] transition-all rounded-md cursor-pointer"
+            onClick={() => navigate('/settings')}
           >
             <span className="material-symbols-outlined text-xl">settings</span>
             <span className="font-medium tracking-tight">Settings</span>
@@ -179,7 +172,11 @@ export default function Investors() {
             {/* Assigned to filter */}
             <div className="relative flex items-center gap-1.5 px-3 py-1.5 bg-[#1e2025] rounded border border-outline-variant/10 cursor-pointer hover:bg-surface-container-high transition-colors">
               <span className="text-[11px] font-medium text-on-surface-variant">Assigned to:</span>
-              <span className="text-[11px] font-semibold text-on-surface">Everyone</span>
+              <span className="text-[11px] font-semibold text-on-surface">
+                {assignedFilter === 'all'
+                  ? 'Everyone'
+                  : users.find((user) => user.id === assignedFilter)?.name ?? 'Assigned user'}
+              </span>
               <span className="material-symbols-outlined text-xs text-on-surface-variant">
                 keyboard_arrow_down
               </span>
@@ -189,13 +186,18 @@ export default function Investors() {
                 className="absolute inset-0 opacity-0 cursor-pointer w-full"
               >
                 <option value="all">Everyone</option>
+                {users.map((user) => (
+                  <option key={user.id} value={user.id}>
+                    {user.name} ({roleLabel(user.role)})
+                  </option>
+                ))}
               </select>
             </div>
             {/* Stage filter */}
             <div className="relative flex items-center gap-1.5 px-3 py-1.5 bg-[#1e2025] rounded border border-outline-variant/10 cursor-pointer hover:bg-surface-container-high transition-colors">
               <span className="text-[11px] font-medium text-on-surface-variant">Stage:</span>
               <span className="text-[11px] font-semibold text-on-surface">
-                {stageFilter === 'all' ? 'All Stages' : capitalise(stageFilter)}
+                {stageFilter === 'all' ? 'All Stages' : getStageLabel(stages, stageFilter)}
               </span>
               <span className="material-symbols-outlined text-xs text-on-surface-variant">
                 keyboard_arrow_down
@@ -206,8 +208,8 @@ export default function Investors() {
                 className="absolute inset-0 opacity-0 cursor-pointer w-full"
               >
                 <option value="all">All Stages</option>
-                {STAGES.map((s) => (
-                  <option key={s} value={s}>{capitalise(s)}</option>
+                {stages.map((s) => (
+                  <option key={s.key} value={s.key}>{s.label}</option>
                 ))}
               </select>
             </div>
@@ -253,9 +255,9 @@ export default function Investors() {
                     <div className="absolute inset-0 bg-gradient-to-t from-[#111318] via-transparent to-transparent opacity-80"></div>
                     <div className="absolute bottom-3 left-3">
                       <span
-                        className={`px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded border backdrop-blur-md ${getStageBadgeClass(investor.stage)}`}
+                        className={`px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded border backdrop-blur-md ${getStageBadgeClass(investor.stage, stages)}`}
                       >
-                        {formatStage(investor.stage)}
+                        {getStageLabel(stages, investor.stage)}
                       </span>
                     </div>
                   </div>
@@ -275,7 +277,11 @@ export default function Investors() {
                   <div className="px-4 py-3 flex items-center justify-between border-t border-outline-variant/10">
                     <div className="flex items-center gap-2">
                       <div className="w-1.5 h-1.5 rounded-full bg-tertiary"></div>
-                      <span className="text-[11px] text-on-surface-variant">{PLACEHOLDER_OWNER}</span>
+                      <span className="text-[11px] text-on-surface-variant">
+                        {investor.primary_owner
+                          ? `${investor.primary_owner.name} (${roleLabel(investor.primary_owner.role)})`
+                          : 'Unassigned'}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -288,10 +294,6 @@ export default function Investors() {
 
       {/* ── Mobile Bottom Nav ─────────────────────────────────────────────── */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-[#1f2128] h-16 flex items-center justify-around px-2 border-t border-outline-variant/10 z-50">
-        <a className="flex flex-col items-center gap-1 text-[#94a3b8]" href="#">
-          <span className="material-symbols-outlined">dashboard</span>
-          <span className="text-[10px]">Dashboard</span>
-        </a>
         <a className="flex flex-col items-center gap-1 text-[#e6c487]" href="#">
           <span
             className="material-symbols-outlined"

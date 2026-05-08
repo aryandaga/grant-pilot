@@ -4,6 +4,7 @@ import { getInvestors, type Investor } from '../api/investors';
 import {
   getDocuments,
   uploadDocument,
+  uploadAudioRecording,
   deleteDocument,
   searchDocuments,
   getDocumentBlobUrl,
@@ -23,6 +24,8 @@ function getFileType(name: string): { label: string; icon: string; color: string
   const ext = name.split('.').pop()?.toLowerCase() ?? '';
   if (ext === 'pdf')
     return { label: 'PDF', icon: 'picture_as_pdf', color: 'text-red-400' };
+  if (['mp3', 'wav', 'm4a', 'webm', 'ogg', 'mp4', 'mpeg'].includes(ext))
+    return { label: 'Audio', icon: 'graphic_eq', color: 'text-purple-400' };
   if (['xlsx', 'xls', 'csv'].includes(ext))
     return { label: 'Spreadsheet', icon: 'table_chart', color: 'text-green-400' };
   if (['docx', 'doc'].includes(ext))
@@ -34,7 +37,8 @@ function getFileType(name: string): { label: string; icon: string; color: string
 
 type DateRange = 'all' | '7d' | '30d' | 'year';
 
-const TYPE_OPTIONS = ['PDF', 'Spreadsheet', 'Document', 'Presentation', 'File'] as const;
+const TYPE_OPTIONS = ['PDF', 'Audio', 'Spreadsheet', 'Document', 'Presentation', 'File'] as const;
+const AUDIO_EXTENSIONS = ['mp3', 'wav', 'm4a', 'webm', 'ogg', 'mp4', 'mpeg'];
 
 const DATE_LABELS: Record<DateRange, string> = {
   all:  'All time',
@@ -57,6 +61,11 @@ function scoreBar(score: number): string {
   if (score >= 0.85) return 'bg-emerald-500';
   if (score >= 0.65) return 'bg-primary';
   return 'bg-outline-variant';
+}
+
+function isAudioFile(file: File): boolean {
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+  return file.type.startsWith('audio/') || AUDIO_EXTENSIONS.includes(ext);
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -82,6 +91,7 @@ export default function Documents() {
   const [uploadInvestorId,  setUploadInvestorId]  = useState<string>('');
   const [uploading,         setUploading]         = useState<boolean>(false);
   const [uploadError,       setUploadError]       = useState<string | null>(null);
+  const [lastTranscript,    setLastTranscript]    = useState<string | null>(null);
 
   // ── Filter state ─────────────────────────────────────────────────────────────
   const [filterInvestor, setFilterInvestor] = useState<string>('');
@@ -160,12 +170,13 @@ export default function Documents() {
   const handleFileSelected = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.type !== 'application/pdf') {
-      setUploadError('Only PDF files are supported.');
+    if (file.type !== 'application/pdf' && !isAudioFile(file)) {
+      setUploadError('Only PDF files and audio recordings are supported.');
       return;
     }
     setUploadFile(file);
     setUploadError(null);
+    setLastTranscript(null);
     setShowUploadPanel(true);
     // reset input so same file can be re-selected if needed
     e.target.value = '';
@@ -175,14 +186,20 @@ export default function Documents() {
     if (!uploadFile) return;
     setUploading(true);
     setUploadError(null);
+    setLastTranscript(null);
     try {
-      await uploadDocument(uploadFile, uploadInvestorId || undefined);
+      if (isAudioFile(uploadFile)) {
+        const result = await uploadAudioRecording(uploadFile, uploadInvestorId || undefined);
+        setLastTranscript(result.transcript);
+      } else {
+        await uploadDocument(uploadFile, uploadInvestorId || undefined);
+      }
       setShowUploadPanel(false);
       setUploadFile(null);
       setUploadInvestorId('');
       await fetchDocuments();
     } catch {
-      setUploadError('Upload failed. Please try again.');
+      setUploadError('Upload failed. Make sure the backend audio dependency is installed, then try again.');
     } finally {
       setUploading(false);
     }
@@ -193,6 +210,7 @@ export default function Documents() {
     setUploadFile(null);
     setUploadInvestorId('');
     setUploadError(null);
+    setLastTranscript(null);
   };
 
   // ── Delete handler ───────────────────────────────────────────────────────────
@@ -238,13 +256,6 @@ export default function Documents() {
 
         <nav className="flex-1 space-y-1">
           <a
-            className="flex items-center gap-3 px-3 py-2 text-sm text-[#94a3b8] hover:text-[#e2e2e9] hover:bg-[#111318]/50 transition-all rounded-md"
-            href="#"
-          >
-            <span className="material-symbols-outlined text-xl">dashboard</span>
-            <span className="font-medium tracking-tight">Dashboard</span>
-          </a>
-          <a
             className="flex items-center gap-3 px-3 py-2 text-sm text-[#94a3b8] hover:text-[#e2e2e9] hover:bg-[#111318]/50 transition-all rounded-md cursor-pointer"
             onClick={() => navigate('/investors')}
           >
@@ -275,8 +286,8 @@ export default function Documents() {
 
         <div className="mt-auto pt-6 space-y-4">
           <a
-            className="flex items-center gap-3 px-3 py-2 text-sm text-[#94a3b8] hover:text-[#e2e2e9] transition-all rounded-md"
-            href="#"
+            className="flex items-center gap-3 px-3 py-2 text-sm text-[#94a3b8] hover:text-[#e2e2e9] transition-all rounded-md cursor-pointer"
+            onClick={() => navigate('/settings')}
           >
             <span className="material-symbols-outlined text-xl">settings</span>
             <span className="font-medium tracking-tight">Settings</span>
@@ -292,7 +303,7 @@ export default function Documents() {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".pdf,application/pdf"
+            accept=".pdf,application/pdf,audio/*,.mp3,.wav,.m4a,.webm,.ogg,.mp4"
             className="hidden"
             onChange={handleFileSelected}
           />
@@ -403,7 +414,9 @@ export default function Documents() {
             <div className="bg-surface-container border border-primary/20 rounded-lg p-5 mb-6 flex flex-col gap-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-on-surface flex items-center gap-2">
-                  <span className="material-symbols-outlined text-red-400 text-xl">picture_as_pdf</span>
+                  <span className={`material-symbols-outlined ${getFileType(uploadFile.name).color} text-xl`}>
+                    {getFileType(uploadFile.name).icon}
+                  </span>
                   {uploadFile.name}
                 </h3>
                 <button onClick={handleCancelUpload} className="text-outline hover:text-on-surface transition-colors">
@@ -437,8 +450,8 @@ export default function Documents() {
                     className="px-6 py-2 bg-primary-container text-on-primary-container text-sm font-semibold rounded hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 whitespace-nowrap"
                   >
                     {uploading
-                      ? <><span className="material-symbols-outlined text-base animate-spin">progress_activity</span>Uploading…</>
-                      : <><span className="material-symbols-outlined text-base">cloud_upload</span>Confirm Upload</>
+                      ? <><span className="material-symbols-outlined text-base animate-spin">progress_activity</span>{isAudioFile(uploadFile) ? 'Transcribing...' : 'Uploading...'}</>
+                      : <><span className="material-symbols-outlined text-base">cloud_upload</span>{isAudioFile(uploadFile) ? 'Transcribe Recording' : 'Confirm Upload'}</>
                     }
                   </button>
                 </div>
@@ -447,6 +460,23 @@ export default function Documents() {
               {uploadError && (
                 <p className="text-[11px] text-red-400">{uploadError}</p>
               )}
+            </div>
+          )}
+
+          {lastTranscript && (
+            <div className="bg-surface-container border border-primary/20 rounded-lg p-5 mb-6">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <h3 className="text-sm font-semibold text-on-surface flex items-center gap-2">
+                  <span className="material-symbols-outlined text-purple-400 text-xl">record_voice_over</span>
+                  Speech to Text
+                </h3>
+                <button onClick={() => setLastTranscript(null)} className="text-outline hover:text-on-surface transition-colors">
+                  <span className="material-symbols-outlined text-lg">close</span>
+                </button>
+              </div>
+              <p className="text-sm text-on-surface-variant leading-relaxed whitespace-pre-wrap max-h-52 overflow-y-auto">
+                {lastTranscript}
+              </p>
             </div>
           )}
 
@@ -684,10 +714,6 @@ export default function Documents() {
 
       {/* ── Mobile bottom nav ─────────────────────────────────────────────── */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-[#1f2128] h-16 flex items-center justify-around px-2 border-t border-outline-variant/10 z-50">
-        <a className="flex flex-col items-center gap-1 text-[#94a3b8]" href="#">
-          <span className="material-symbols-outlined">dashboard</span>
-          <span className="text-[10px]">Dashboard</span>
-        </a>
         <a
           className="flex flex-col items-center gap-1 text-[#94a3b8]"
           onClick={() => navigate('/investors')}

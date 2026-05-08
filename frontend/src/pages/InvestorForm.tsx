@@ -1,18 +1,18 @@
-import { useState, FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createInvestor, updateInvestor, type InvestorDetail, type InvestorPayload } from '../api/investors';
+import {
+  createInvestor,
+  getInvestorStages,
+  updateInvestor,
+  type AssignedUser,
+  type InvestorDetail,
+  type InvestorPayload,
+  type InvestorStage,
+} from '../api/investors';
+import { getUsers } from '../api/users';
+import { DEFAULT_INVESTOR_STAGES, getStageKey, sortStages } from '../lib/investorStages';
 
 // ─── Pipeline stages (source of truth) ───────────────────────────────────────
-
-export const STAGES = ['cold', 'initial', 'qualified', 'proposal', 'diligent', 'commit', 'received'];
-
-function safeStage(stage: string): string {
-  return STAGES.includes(stage) ? stage : 'cold';
-}
-
-function capitalise(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -27,11 +27,12 @@ export default function InvestorForm({ mode, investor }: Props) {
 
   // Initialise fields
   const [name,         setName]         = useState(investor?.name         ?? '');
-  const [stage,        setStage]        = useState(safeStage(investor?.stage ?? 'cold'));
+  const [stage,        setStage]        = useState(investor?.stage ?? 'cold');
   const [organization, setOrganization] = useState(investor?.organization  ?? '');
   const [email,        setEmail]        = useState(investor?.email         ?? '');
   const [capacity,     setCapacity]     = useState(investor?.capacity      != null ? String(investor.capacity)   : '');
   const [askAmount,    setAskAmount]    = useState(investor?.ask_amount    != null ? String(investor.ask_amount) : '');
+  const [primaryOwnerId, setPrimaryOwnerId] = useState(investor?.primary_owner_id ?? '');
   const [interests,    setInterests]    = useState(
     investor?.interests && investor.interests.length > 0
       ? investor.interests.join(', ')
@@ -40,12 +41,35 @@ export default function InvestorForm({ mode, investor }: Props) {
 
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState<string | null>(null);
+  const [users, setUsers] = useState<AssignedUser[]>([]);
+  const [stages, setStages] = useState<InvestorStage[]>(DEFAULT_INVESTOR_STAGES);
+  const [usersLoading, setUsersLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [data, stageData] = await Promise.all([getUsers(), getInvestorStages()]);
+        const sortedStages = sortStages(stageData);
+        setUsers(data);
+        setStages(sortedStages);
+        setStage((current) => getStageKey(sortedStages, current));
+        if (!primaryOwnerId && data.length > 0) {
+          setPrimaryOwnerId(data[0].id);
+        }
+      } catch {
+        setError('Failed to load assignable users.');
+      } finally {
+        setUsersLoading(false);
+      }
+    })();
+  }, []);
 
   // ── Submit ─────────────────────────────────────────────────────────────────
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!name.trim()) { setError('Name is required.'); return; }
+    if (!primaryOwnerId) { setError('Assigned user is required.'); return; }
 
     setSaving(true);
     setError(null);
@@ -53,6 +77,7 @@ export default function InvestorForm({ mode, investor }: Props) {
     const payload: InvestorPayload = {
       name:         name.trim(),
       stage,
+      primary_owner_id: primaryOwnerId,
       organization: organization.trim() || undefined,
       email:        email.trim()        || undefined,
       capacity:     capacity    !== '' ? Number(capacity)   : undefined,
@@ -140,8 +165,8 @@ export default function InvestorForm({ mode, investor }: Props) {
                 value={stage}
                 onChange={(e) => setStage(e.target.value)}
               >
-                {STAGES.map((s) => (
-                  <option key={s} value={s}>{capitalise(s)}</option>
+                {stages.map((s) => (
+                  <option key={s.key} value={s.key}>{s.label}</option>
                 ))}
               </select>
             </div>
@@ -149,6 +174,32 @@ export default function InvestorForm({ mode, investor }: Props) {
         </section>
 
         {/* ── Organization & Contact ────────────────────────────────────── */}
+        <section className="bg-surface-container rounded-lg p-6 space-y-5">
+          <h2 className="text-xs font-semibold uppercase tracking-widest text-outline">
+            Internal Assignment
+          </h2>
+
+          <div>
+            <label className={labelClass}>
+              Assigned User <span className="text-red-400">*</span>
+            </label>
+            <select
+              className={inputClass}
+              value={primaryOwnerId}
+              onChange={(e) => setPrimaryOwnerId(e.target.value)}
+              required
+              disabled={usersLoading}
+            >
+              <option value="">{usersLoading ? 'Loading users...' : 'Select a user'}</option>
+              {users.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.name} - {user.role === 'head' ? 'Head' : 'Member'}
+                </option>
+              ))}
+            </select>
+          </div>
+        </section>
+
         <section className="bg-surface-container rounded-lg p-6 space-y-5">
           <h2 className="text-xs font-semibold uppercase tracking-widest text-outline">
             Organization &amp; Contact

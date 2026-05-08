@@ -30,10 +30,19 @@ class ChatResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ChatDocumentResponse(BaseModel):
+    id: UUID
+    name: str
+    investor_id: UUID | None
+    chunk_count: int
+    created_at: datetime | None
+
+
 class ChatDetailResponse(BaseModel):
     id: UUID
     title: Optional[str]
     created_at: datetime | None
     messages: List[MessageResponse] = []
+    documents: List[ChatDocumentResponse] = []
 
     model_config = {"from_attributes": True}

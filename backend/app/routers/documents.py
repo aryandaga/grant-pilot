@@ -8,13 +8,14 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.document import Document, DocumentChunk
+from app.models.document import Document, DocumentChunk, DocumentTranscript
 from app.models.investor import Investor
 from app.models.user import User
 from app.schemas.document import (
     DocumentChunkResult,
     DocumentListItem,
     DocumentSearchRequest,
+    DocumentTranscriptResponse,
     DocumentUploadResponse,
 )
 from app.services.embedding import generate_embedding
@@ -84,6 +85,7 @@ def list_documents(
         db.query(
             Document.id,
             Document.name,
+            Document.investor_id,
             Document.created_at,
             Investor.name.label("investor_name"),
             func.count(DocumentChunk.id).label("chunk_count"),
@@ -99,6 +101,7 @@ def list_documents(
         DocumentListItem(
             id=row.id,
             name=row.name,
+            investor_id=row.investor_id,
             investor_name=row.investor_name,
             created_at=row.created_at,
             chunk_count=row.chunk_count,
@@ -226,7 +229,7 @@ def download_document(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Stream the original PDF bytes back to the client."""
+    """Stream the original uploaded file bytes back to the client."""
     document = db.query(Document).filter(Document.id == document_id).first()
     if not document:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found.")
@@ -235,12 +238,48 @@ def download_document(
 
     return Response(
         content=document.file_data,
-        media_type="application/pdf",
+        media_type=document.mime_type or "application/octet-stream",
         headers={"Content-Disposition": f'inline; filename="{document.name}"'},
     )
 
 
 # ─── Vector search ────────────────────────────────────────────────────────────
+
+@router.get("/{document_id}/transcript", response_model=DocumentTranscriptResponse)
+def get_document_transcript(
+    document_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    document = db.query(Document).filter(Document.id == document_id).first()
+    if not document:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found.")
+
+    transcript = (
+        db.query(DocumentTranscript)
+        .filter(DocumentTranscript.document_id == document_id)
+        .first()
+    )
+    if transcript:
+        content = transcript.content
+    else:
+        chunks = (
+            db.query(DocumentChunk.content)
+            .filter(DocumentChunk.document_id == document_id)
+            .order_by(DocumentChunk.chunk_index)
+            .all()
+        )
+        content = "\n\n".join(chunk.content for chunk in chunks)
+
+    if not content:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transcript not available.")
+
+    return DocumentTranscriptResponse(
+        document_id=document.id,
+        name=document.name,
+        transcript=content,
+    )
+
 
 @router.post("/search", response_model=list[DocumentChunkResult])
 def search_documents(

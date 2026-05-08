@@ -18,6 +18,9 @@ class Chat(Base):
     messages = relationship("ChatMessage", back_populates="chat",
                             cascade="all, delete-orphan",
                             order_by="ChatMessage.created_at")
+    documents = relationship("ChatDocument", back_populates="chat",
+                             cascade="all, delete-orphan",
+                             order_by="ChatDocument.created_at")
 
 
 class ChatMessage(Base):
@@ -30,3 +33,15 @@ class ChatMessage(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     chat = relationship("Chat", back_populates="messages")
+
+
+class ChatDocument(Base):
+    __tablename__ = "chat_documents"
+
+    id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    chat_id     = Column(UUID(as_uuid=True), ForeignKey("chats.id", ondelete="CASCADE"), nullable=False)
+    document_id = Column(UUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False)
+    created_at  = Column(DateTime(timezone=True), server_default=func.now())
+
+    chat     = relationship("Chat", back_populates="documents")
+    document = relationship("Document")

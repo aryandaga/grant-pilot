@@ -1,6 +1,7 @@
 import uuid
-from sqlalchemy import Column, String, Float, ARRAY, Text
+from sqlalchemy import Column, String, Float, ARRAY, Text, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
 from app.database import Base
 
 
@@ -15,3 +16,6 @@ class Investor(Base):
     interests = Column(ARRAY(Text), nullable=True)  # list of focus areas
     email = Column(String, nullable=True)
     organization = Column(String, nullable=True)
+    primary_owner_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+
+    primary_owner = relationship("User", foreign_keys=[primary_owner_id])
