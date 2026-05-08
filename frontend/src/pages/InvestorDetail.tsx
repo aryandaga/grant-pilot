@@ -2,7 +2,7 @@ import { useState, useEffect, type FormEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import apiClient from '../api/client';
 import { getDocumentBlobUrl, getDocuments, type DocumentItem } from '../api/documents';
-import { getInvestorStages, type InvestorStage } from '../api/investors';
+import { generateInvestorBriefing, getInvestorStages, type InvestorStage } from '../api/investors';
 import { DEFAULT_INVESTOR_STAGES, getStageKey, sortStages } from '../lib/investorStages';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -94,6 +94,8 @@ export default function InvestorDetail() {
   const [stages,        setStages]        = useState<InvestorStage[]>(DEFAULT_INVESTOR_STAGES);
   const [loading,       setLoading]       = useState<boolean>(true);
   const [error,         setError]         = useState<string | null>(null);
+  const [briefingError, setBriefingError] = useState<string | null>(null);
+  const [generatingBriefing, setGeneratingBriefing] = useState<boolean>(false);
 
   // Note form state
   const [newNote,      setNewNote]      = useState<string>('');
@@ -190,6 +192,21 @@ export default function InvestorDetail() {
       window.open(url, '_blank');
     } catch {
       window.open(`http://localhost:8000/api/documents/${documentId}/download`, '_blank');
+    }
+  };
+
+  const handleGenerateBriefing = async () => {
+    if (!id || generatingBriefing) return;
+    setGeneratingBriefing(true);
+    setBriefingError(null);
+    try {
+      const briefing = await generateInvestorBriefing(id);
+      localStorage.setItem('activeChatId', briefing.chat_id);
+      navigate('/ai');
+    } catch {
+      setBriefingError('Could not generate the AI briefing. Please try again.');
+    } finally {
+      setGeneratingBriefing(false);
     }
   };
 
@@ -565,15 +582,23 @@ export default function InvestorDetail() {
             </div>
           </div>
 
-          {/* Generate AI Briefing — PLACEHOLDER */}
-          <button className="w-full py-3 border border-dashed border-primary/30 rounded-lg text-primary text-xs font-semibold flex items-center justify-center gap-2 hover:bg-primary/5 transition-all">
+          {/* Generate AI Briefing */}
+          {briefingError && (
+            <p className="text-[11px] text-red-400 leading-snug">{briefingError}</p>
+          )}
+          <button
+            type="button"
+            onClick={handleGenerateBriefing}
+            disabled={generatingBriefing}
+            className="w-full py-3 border border-dashed border-primary/30 rounded-lg text-primary text-xs font-semibold flex items-center justify-center gap-2 hover:bg-primary/5 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+          >
             <span
               className="material-symbols-outlined text-[18px]"
               style={{ fontVariationSettings: "'FILL' 1" }}
             >
-              auto_awesome
+              {generatingBriefing ? 'progress_activity' : 'auto_awesome'}
             </span>
-            Generate AI Briefing
+            {generatingBriefing ? 'Generating Briefing...' : 'Generate AI Briefing'}
           </button>
 
         </aside>
