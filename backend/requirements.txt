@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+psycopg2-binary
+python-dotenv
+python-jose[cryptography]
+bcrypt
+pydantic[email]
+pypdf
+pgvector
+sentence-transformers
+python-multipart
+faster-whisper

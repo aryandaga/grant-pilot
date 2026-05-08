@@ -6,6 +6,7 @@ import InvestorCreate from './pages/InvestorCreate';
 import InvestorEdit from './pages/InvestorEdit';
 import Documents from './pages/Documents';
 import AIAssistant from './pages/AIAssistant';
+import Settings from './pages/Settings';
 
 function App() {
   const isAuthenticated = !!localStorage.getItem('token');
@@ -38,6 +39,10 @@ function App() {
         <Route
           path="/ai"
           element={isAuthenticated ? <AIAssistant /> : <Navigate to="/login" />}
+        />
+        <Route
+          path="/settings"
+          element={isAuthenticated ? <Settings /> : <Navigate to="/login" />}
         />
 
         <Route

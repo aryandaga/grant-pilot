@@ -4,11 +4,26 @@ from uuid import UUID
 
 from app.database import get_db
 from app.models.investor import Investor
+from app.models.investor_stage import INVESTOR_STAGES
 from app.models.user import User
-from app.schemas.investor import InvestorCreate, InvestorUpdate, InvestorSummary, InvestorDetail
+from app.schemas.investor import (
+    InvestorCreate,
+    InvestorDetail,
+    InvestorStageResponse,
+    InvestorSummary,
+    InvestorUpdate,
+)
 from app.routers.auth import get_current_user
 
 router = APIRouter(prefix="/api/investors", tags=["investors"])
+
+
+@router.get("/stages", response_model=list[InvestorStageResponse])
+def list_investor_stages(
+    current_user: User = Depends(get_current_user),
+):
+    """Return the canonical investor pipeline stages in display order."""
+    return INVESTOR_STAGES
 
 
 @router.get("", response_model=list[InvestorSummary])
@@ -17,7 +32,7 @@ def list_investors(
     current_user: User = Depends(get_current_user),
 ):
     """Return all investors (summary fields only)."""
-    return db.query(Investor).order_by(Investor.name).all()
+    return db.query(Investor).options(joinedload(Investor.primary_owner)).order_by(Investor.name).all()
 
 
 @router.get("/{investor_id}", response_model=InvestorDetail)
@@ -29,7 +44,7 @@ def get_investor(
     """Return full investor details including nested notes."""
     investor = (
         db.query(Investor)
-        .options(joinedload(Investor.notes))
+        .options(joinedload(Investor.notes), joinedload(Investor.primary_owner))
         .filter(Investor.id == investor_id)
         .first()
     )
@@ -51,7 +66,7 @@ def update_investor(
     """
     investor = (
         db.query(Investor)
-        .options(joinedload(Investor.notes))
+        .options(joinedload(Investor.notes), joinedload(Investor.primary_owner))
         .filter(Investor.id == investor_id)
         .first()
     )
@@ -59,6 +74,10 @@ def update_investor(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Investor not found")
 
     updates = body.model_dump(exclude_unset=True)
+    if "primary_owner_id" in updates and updates["primary_owner_id"] is not None:
+        owner = db.query(User).filter(User.id == updates["primary_owner_id"]).first()
+        if not owner:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assigned user not found")
     for field, value in updates.items():
         setattr(investor, field, value)
 
@@ -74,7 +93,13 @@ def create_investor(
     current_user: User = Depends(get_current_user),
 ):
     """Create a new investor."""
-    investor = Investor(**body.model_dump())
+    payload = body.model_dump()
+    owner_id = payload.get("primary_owner_id") or current_user.id
+    owner = db.query(User).filter(User.id == owner_id).first()
+    if not owner:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assigned user not found")
+    payload["primary_owner_id"] = owner_id
+    investor = Investor(**payload)
     db.add(investor)
     db.commit()
     db.refresh(investor)

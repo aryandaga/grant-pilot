@@ -35,3 +35,14 @@ class DocumentChunk(Base):
     created_at  = Column(DateTime(timezone=True), server_default=func.now())
 
     document = relationship("Document", back_populates="chunks")
+
+
+class DocumentTranscript(Base):
+    __tablename__ = "document_transcripts"
+
+    id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id = Column(UUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, unique=True)
+    content     = Column(Text, nullable=False)
+    created_at  = Column(DateTime(timezone=True), server_default=func.now())
+
+    document = relationship("Document", backref="transcript")

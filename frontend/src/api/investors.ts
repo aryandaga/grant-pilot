@@ -1,10 +1,19 @@
 import apiClient from './client';
 
+export type AssignedUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: 'head' | 'member';
+};
+
 export type Investor = {
   id: string;
   name: string;
-  organization: string;
+  organization: string | null;
   stage: string;
+  primary_owner_id: string | null;
+  primary_owner: AssignedUser | null;
 };
 
 export type InvestorDetail = {
@@ -16,11 +25,14 @@ export type InvestorDetail = {
   capacity: number | null;
   ask_amount: number | null;
   interests: string[] | null;
+  primary_owner_id: string | null;
+  primary_owner: AssignedUser | null;
 };
 
 export type InvestorPayload = {
   name: string;
   stage: string;
+  primary_owner_id?: string;
   organization?: string;
   email?: string;
   capacity?: number;
@@ -28,8 +40,20 @@ export type InvestorPayload = {
   interests?: string[];
 };
 
+export type InvestorStage = {
+  key: string;
+  label: string;
+  short_label: string;
+  order: number;
+};
+
 export async function getInvestors(): Promise<Investor[]> {
   const response = await apiClient.get<Investor[]>('/api/investors');
+  return response.data;
+}
+
+export async function getInvestorStages(): Promise<InvestorStage[]> {
+  const response = await apiClient.get<InvestorStage[]>('/api/investors/stages');
   return response.data;
 }
 

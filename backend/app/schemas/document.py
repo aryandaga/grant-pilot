@@ -27,6 +27,13 @@ class DocumentUploadResponse(BaseModel):
 class DocumentListItem(BaseModel):
     id: UUID
     name: str
+    investor_id: UUID | None
     investor_name: str | None
     created_at: datetime | None
     chunk_count: int
+
+
+class DocumentTranscriptResponse(BaseModel):
+    document_id: UUID
+    name: str
+    transcript: str

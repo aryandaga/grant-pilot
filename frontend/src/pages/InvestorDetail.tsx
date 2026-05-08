@@ -1,6 +1,9 @@
-import { useState, useEffect, FormEvent } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import apiClient from '../api/client';
+import { getDocumentBlobUrl, getDocuments, type DocumentItem } from '../api/documents';
+import { getInvestorStages, type InvestorStage } from '../api/investors';
+import { DEFAULT_INVESTOR_STAGES, getStageKey, sortStages } from '../lib/investorStages';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -13,6 +16,12 @@ type InvestorDetail = {
   capacity: number | null;
   ask_amount: number | null;
   interests: string[] | null;
+  primary_owner: {
+    id: string;
+    name: string;
+    email: string;
+    role: 'head' | 'member';
+  } | null;
 };
 
 type Note = {
@@ -34,22 +43,9 @@ type Interaction = {
 
 // ─── Pipeline config ──────────────────────────────────────────────────────────
 
-const STAGE_ORDER   = ['cold', 'initial', 'qualified', 'proposal', 'diligent', 'commit', 'received'];
-const PIPELINE_LABELS = ['Cold', 'Initial', 'Qualified', 'Proposal', 'Diligent', 'Commit', 'Received'];
-
 // ─── Placeholder data ─────────────────────────────────────────────────────────
 
 const STATIC_INTERESTS = ['STEM Infrastructure', 'Quantum Computing', 'Renewable Energy', 'FinTech (SaaS)'];
-
-const STATIC_RELATIONS = [
-  { initials: 'PS', name: 'Priya Sharma', role: 'Primary Relationship Mgr.' },
-  { initials: 'RK', name: 'Rahul Kumar',  role: 'External Contact'          },
-];
-
-const STATIC_DOCUMENTS = [
-  { name: 'Q3_Pitch_Deck.pdf',   icon: 'description', color: 'text-red-400'  },
-  { name: 'Financial_Model.xls', icon: 'table_chart',  color: 'text-blue-400' },
-];
 
 const INTERACTION_TYPE_ICON: Record<string, string> = {
   call:    'phone',
@@ -61,6 +57,21 @@ const INTERACTION_TYPE_ICON: Record<string, string> = {
 
 function getInitials(name: string): string {
   return name.split(' ').map((w) => w[0] ?? '').join('').slice(0, 2).toUpperCase();
+}
+
+function roleLabel(role: 'head' | 'member'): string {
+  return role === 'head' ? 'Head' : 'Member';
+}
+
+function getFileType(name: string): { icon: string; color: string } {
+  const ext = name.split('.').pop()?.toLowerCase() ?? '';
+  if (ext === 'pdf') return { icon: 'picture_as_pdf', color: 'text-red-400' };
+  if (['mp3', 'wav', 'm4a', 'webm', 'ogg', 'mp4', 'mpeg'].includes(ext)) {
+    return { icon: 'graphic_eq', color: 'text-purple-400' };
+  }
+  if (['xlsx', 'xls', 'csv'].includes(ext)) return { icon: 'table_chart', color: 'text-green-400' };
+  if (['docx', 'doc'].includes(ext)) return { icon: 'description', color: 'text-blue-400' };
+  return { icon: 'attach_file', color: 'text-outline' };
 }
 
 function formatDate(dateStr: string | null): string {
@@ -79,6 +90,8 @@ export default function InvestorDetail() {
   const [investor,      setInvestor]      = useState<InvestorDetail | null>(null);
   const [notes,         setNotes]         = useState<Note[]>([]);
   const [interactions,  setInteractions]  = useState<Interaction[]>([]);
+  const [documents,     setDocuments]     = useState<DocumentItem[]>([]);
+  const [stages,        setStages]        = useState<InvestorStage[]>(DEFAULT_INVESTOR_STAGES);
   const [loading,       setLoading]       = useState<boolean>(true);
   const [error,         setError]         = useState<string | null>(null);
 
@@ -110,14 +123,18 @@ export default function InvestorDetail() {
     if (!id) return;
     (async () => {
       try {
-        const [investorRes, notesRes, interactionsRes] = await Promise.all([
+        const [investorRes, notesRes, interactionsRes, documentsRes, stageData] = await Promise.all([
           apiClient.get<InvestorDetail>(`/api/investors/${id}`),
           apiClient.get<Note[]>(`/api/investors/${id}/notes`),
           apiClient.get<Interaction[]>(`/api/interactions?investor_id=${id}`),
+          getDocuments(),
+          getInvestorStages(),
         ]);
         setInvestor(investorRes.data);
         setNotes(notesRes.data);
         setInteractions(interactionsRes.data);
+        setDocuments(documentsRes.filter((doc) => doc.investor_id === id));
+        setStages(sortStages(stageData));
       } catch {
         setError('Failed to load investor profile.');
       } finally {
@@ -167,6 +184,15 @@ export default function InvestorDetail() {
 
   // ── States ────────────────────────────────────────────────────────────────
 
+  const handleOpenDocument = async (documentId: string) => {
+    try {
+      const url = await getDocumentBlobUrl(documentId);
+      window.open(url, '_blank');
+    } catch {
+      window.open(`http://localhost:8000/api/documents/${documentId}/download`, '_blank');
+    }
+  };
+
   if (loading) {
     return (
       <div className="p-8">
@@ -185,9 +211,8 @@ export default function InvestorDetail() {
 
   // ── Derived values ────────────────────────────────────────────────────────
 
-  const safeStage  = STAGE_ORDER.includes(investor.stage) ? investor.stage : 'cold';
-  const currentIdx = STAGE_ORDER.indexOf(safeStage);
-  const filledPct  = `${(currentIdx / (STAGE_ORDER.length - 1)) * 100}%`;
+  const safeStage  = getStageKey(stages, investor.stage);
+  const currentIdx = Math.max(0, stages.findIndex((stage) => stage.key === safeStage));
   const interests   = investor.interests && investor.interests.length > 0
     ? investor.interests
     : STATIC_INTERESTS;
@@ -251,38 +276,41 @@ export default function InvestorDetail() {
           <h3 className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Deal Stage</h3>
           <div className="text-[11px] text-primary bg-primary/10 px-2 py-0.5 rounded-full font-medium">Active Lead</div>
         </div>
-        <div className="relative flex justify-between items-center px-4">
-          {/* Progress line */}
-          <div className="absolute h-[2px] left-[32px] right-[32px] top-3 -translate-y-1/2 flex z-0">
-            <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: filledPct }}></div>
-            <div className="h-full bg-surface-container-highest flex-1"></div>
-          </div>
-          {/* Stage nodes */}
-          {PIPELINE_LABELS.map((label, idx) => {
-            const done   = idx < currentIdx;
+        <div className="grid grid-cols-10 items-start px-2">
+          {stages.map((stage, idx) => {
+            const done = idx < currentIdx;
             const active = idx === currentIdx;
+            const upcoming = idx > currentIdx;
             return (
-              <div key={label} className="relative z-10 flex flex-col items-center gap-3 w-0">
+              <div key={stage.key} className="relative flex min-w-0 flex-col items-center gap-3">
+                {idx < stages.length - 1 && (
+                  <div
+                    className={[
+                      'absolute left-1/2 top-3 h-[2px] w-full translate-x-3 transition-colors',
+                      idx < currentIdx ? 'bg-primary' : 'bg-outline-variant/35',
+                    ].join(' ')}
+                  />
+                )}
                 {done && (
-                  <div className="w-6 h-6 rounded-full bg-emerald-500 text-[#111318] flex items-center justify-center shrink-0">
-                    <span className="material-symbols-outlined text-[16px] font-bold">check</span>
+                  <div className="relative z-10 w-6 h-6 rounded-full bg-primary flex items-center justify-center shrink-0 shadow-sm shadow-primary/25">
+                    <div className="w-2.5 h-2.5 rounded-full bg-[#111318]"></div>
                   </div>
                 )}
                 {active && (
-                  <div className="w-6 h-6 rounded-full border-2 border-primary bg-background text-primary flex items-center justify-center animate-pulse shrink-0">
-                    <div className="w-2 h-2 bg-primary rounded-full"></div>
+                  <div className="relative z-10 w-7 h-7 -mt-0.5 rounded-full border-2 border-primary bg-background flex items-center justify-center shrink-0 shadow-[0_0_18px_rgba(230,196,135,0.5)]">
+                    <div className="w-2.5 h-2.5 bg-primary rounded-full animate-pulse"></div>
                   </div>
                 )}
-                {!done && !active && (
-                  <div className="w-6 h-6 rounded-full bg-surface-container-highest flex items-center justify-center shrink-0"></div>
+                {upcoming && (
+                  <div className="relative z-10 w-6 h-6 rounded-full border border-outline-variant/45 bg-surface-container-highest flex items-center justify-center shrink-0"></div>
                 )}
                 <span className={[
-                  'text-[10px] uppercase tracking-tighter whitespace-nowrap',
+                  'max-w-[86px] text-center text-[10px] uppercase leading-tight',
                   active           ? 'font-semibold text-primary'          : '',
                   done             ? 'font-medium text-on-surface-variant' : '',
                   !done && !active ? 'font-medium text-outline'            : '',
                 ].join(' ')}>
-                  {label}
+                  {stage.short_label}
                 </span>
               </div>
             );
@@ -436,38 +464,53 @@ export default function InvestorDetail() {
               Internal Relations
             </h4>
             <div className="flex flex-col gap-3">
-              {STATIC_RELATIONS.map((person) => (
-                <div key={person.name} className="flex items-center gap-3">
+              {investor.primary_owner ? (
+                <div className="flex items-center gap-3">
                   <div className="w-6 h-6 rounded bg-tertiary-container text-on-tertiary-container text-[10px] font-bold flex items-center justify-center shrink-0">
-                    {person.initials}
+                    {getInitials(investor.primary_owner.name)}
                   </div>
                   <div>
-                    <div className="text-[11px] font-medium text-on-surface">{person.name}</div>
-                    <div className="text-[9px] text-on-surface-variant leading-none">{person.role}</div>
+                    <div className="text-[11px] font-medium text-on-surface">{investor.primary_owner.name}</div>
+                    <div className="text-[9px] text-on-surface-variant leading-none">
+                      Primary Relationship Manager - {roleLabel(investor.primary_owner.role)}
+                    </div>
                   </div>
                 </div>
-              ))}
+              ) : (
+                <p className="text-[11px] text-outline">No assigned user.</p>
+              )}
             </div>
           </div>
 
-          {/* Documents — PLACEHOLDER */}
+          {/* Documents */}
           <div className="bg-surface-container rounded-lg p-5">
             <h4 className="text-[10px] font-semibold uppercase tracking-widest text-outline mb-4">Documents</h4>
             <div className="flex flex-col gap-2">
-              {STATIC_DOCUMENTS.map((doc) => (
-                <div
-                  key={doc.name}
-                  className="flex items-center justify-between p-2 bg-surface-container-low rounded group cursor-pointer hover:bg-surface-container-high transition-colors"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className={`material-symbols-outlined text-[18px] ${doc.color}`}>{doc.icon}</span>
-                    <span className="text-[11px] text-on-surface-variant group-hover:text-on-surface">{doc.name}</span>
-                  </div>
-                  <span className="material-symbols-outlined text-[16px] text-outline opacity-0 group-hover:opacity-100 transition-opacity">
-                    download
-                  </span>
-                </div>
-              ))}
+              {documents.length === 0 ? (
+                <p className="text-[11px] text-outline text-center py-2">No linked documents.</p>
+              ) : (
+                documents.map((doc) => {
+                  const fileType = getFileType(doc.name);
+                  return (
+                    <button
+                      key={doc.id}
+                      type="button"
+                      onClick={() => handleOpenDocument(doc.id)}
+                      className="flex items-center justify-between p-2 bg-surface-container-low rounded group cursor-pointer hover:bg-surface-container-high transition-colors text-left"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className={`material-symbols-outlined text-[18px] ${fileType.color}`}>{fileType.icon}</span>
+                        <span className="text-[11px] text-on-surface-variant group-hover:text-on-surface truncate">
+                          {doc.name}
+                        </span>
+                      </div>
+                      <span className="material-symbols-outlined text-[16px] text-outline opacity-0 group-hover:opacity-100 transition-opacity">
+                        open_in_new
+                      </span>
+                    </button>
+                  );
+                })
+              )}
             </div>
           </div>
 
