@@ -90,6 +90,12 @@ class InvestorStageResponse(BaseModel):
     order: int
 
 
+class InvestorBriefingResponse(BaseModel):
+    chat_id: UUID
+    answer: str
+    sources: List[str] = []
+
+
 class InvestorDetail(BaseModel):
     """Full shape returned by the detail endpoint, including nested notes."""
     id: UUID

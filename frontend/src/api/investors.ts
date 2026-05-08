@@ -47,6 +47,12 @@ export type InvestorStage = {
   order: number;
 };
 
+export type InvestorBriefing = {
+  chat_id: string;
+  answer: string;
+  sources: string[];
+};
+
 export async function getInvestors(): Promise<Investor[]> {
   const response = await apiClient.get<Investor[]>('/api/investors');
   return response.data;
@@ -69,5 +75,10 @@ export async function createInvestor(payload: InvestorPayload): Promise<Investor
 
 export async function updateInvestor(id: string, payload: Partial<InvestorPayload>): Promise<InvestorDetail> {
   const response = await apiClient.put<InvestorDetail>(`/api/investors/${id}`, payload);
+  return response.data;
+}
+
+export async function generateInvestorBriefing(id: string): Promise<InvestorBriefing> {
+  const response = await apiClient.post<InvestorBriefing>(`/api/investors/${id}/ai-briefing`);
   return response.data;
 }
